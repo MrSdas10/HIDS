@@ -40,7 +40,7 @@ All alerts are timestamped and logged to both the console and an alert log file 
 |---------------------|---------------------------------------------|
 | `main.py`           | Entry point, thread orchestration           |
 | `file_monitor.py`   | SHA256 hashing, baseline comparison         |
-| `log_monitor.py`    | Tails `/var/log/auth.log` for failed logins |
+| `log_monitor.py`    | Auto-detects and tails SSH log for failed logins |
 | `process_monitor.py`| Scans for non-whitelisted root processes    |
 | `utils.py`          | Hashing, baseline I/O, alert logging        |
 
@@ -49,11 +49,14 @@ All alerts are timestamped and logged to both the console and an alert log file 
 ## Features
 
 - SHA256 file integrity baseline and continuous comparison
-- Real-time SSH brute-force detection via auth.log monitoring
-- Root process auditing with configurable whitelist
+- Real-time SSH brute-force detection with **auto-detected log file** (`auth.log`, `syslog`, or `secure`)
+- Root process auditing with **expanded configurable whitelist** (40+ known safe processes)
+- Kernel thread filtering to reduce false positives
+- Thread health monitoring — alerts if a monitor thread dies unexpectedly
 - Timestamped alerts to console and `alerts.log`
 - Multi-threaded architecture (one thread per monitor)
-- Clean, modular, well-commented code (~200 lines)
+- Compatible with **Kali Linux**, Ubuntu, Debian, CentOS, and Fedora
+- Clean, modular, well-commented code (~250 lines)
 
 ---
 
@@ -84,9 +87,10 @@ HIDS/
 
 ### Prerequisites
 
-- Linux (Ubuntu, Kali Linux, or any Debian-based distro)
+- Linux (Ubuntu, Kali Linux, Debian, CentOS, or Fedora)
 - Python 3.8+
 - `pip` package manager
+- **rsyslog** (required on Kali Linux for SSH log monitoring)
 
 ### Steps
 
@@ -101,6 +105,10 @@ source venv/bin/activate
 
 # 3. Install dependencies
 pip install -r requirements.txt
+
+# 4. (Kali Linux only) Enable rsyslog for SSH log monitoring
+sudo apt install rsyslog
+sudo systemctl enable rsyslog --now
 ```
 
 ---
@@ -157,21 +165,32 @@ echo "malicious change" >> monitored/important.txt
 
 ### Test 2: SSH Brute-Force Attack
 
-Use `hydra` to simulate failed SSH login attempts.
+**Option A:** Use `hydra` to simulate failed SSH login attempts.
 
 ```bash
 hydra -l testuser -P /usr/share/wordlists/rockyou.txt ssh://127.0.0.1
 ```
 
-**Expected Output:**
-```
-[2026-03-08 14:35:00] [ALERT] Failed SSH login attempt detected: Mar  8 14:35:00 host sshd[1234]: Failed password for testuser from 127.0.0.1 port 22 ssh2
+**Option B (recommended for quick testing):** Manually append a fake failed login line.
+
+```bash
+echo "Mar  8 14:35:00 kali sshd[1234]: Failed password for testuser from 192.168.1.100 port 22 ssh2" | sudo tee -a /var/log/auth.log
 ```
 
-> **Note:** You can also simulate this manually by appending to auth.log:
+> **Note:** The SSH monitor auto-detects the correct log file for your distro:
+> - Ubuntu/Debian/Kali: `/var/log/auth.log`
+> - Fallback: `/var/log/syslog`
+> - CentOS/RHEL/Fedora: `/var/log/secure`
+>
+> On Kali Linux, if no log file is found, install rsyslog:
 > ```bash
-> echo "Mar  8 14:35:00 host sshd[1234]: Failed password for testuser from 192.168.1.100 port 22 ssh2" | sudo tee -a /var/log/auth.log
+> sudo apt install rsyslog && sudo systemctl enable rsyslog --now
 > ```
+
+**Expected Output:**
+```
+[2026-03-08 14:35:00] [ALERT] Failed SSH login attempt detected: Mar  8 14:35:00 kali sshd[1234]: Failed password for testuser from 192.168.1.100 port 22 ssh2
+```
 
 ### Test 3: Suspicious Root Process
 
