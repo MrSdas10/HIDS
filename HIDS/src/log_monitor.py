@@ -9,28 +9,46 @@ import os
 
 from utils import write_alert
 
-# Path to the SSH authentication log (Linux)
-AUTH_LOG = "/var/log/auth.log"
+# Possible SSH authentication log paths (varies by distro)
+AUTH_LOG_PATHS = [
+    "/var/log/auth.log",     # Ubuntu, Debian, Kali (with rsyslog)
+    "/var/log/syslog",       # Fallback on some distros
+    "/var/log/secure",       # CentOS, RHEL, Fedora
+]
+
+
+def find_auth_log():
+    """Find the first available SSH log file on the system."""
+    for path in AUTH_LOG_PATHS:
+        if os.path.exists(path):
+            return path
+    return None
 
 
 def monitor_logs():
     """
-    Continuously tail /var/log/auth.log and detect failed SSH login attempts.
-    Uses a file seek approach to only read new lines as they are appended.
+    Continuously tail the SSH authentication log and detect failed login attempts.
+    Automatically detects the correct log file for the distro.
     This function is designed to run in its own thread.
     """
     print("[INFO] SSH log monitor started.")
 
-    # Verify log file exists
-    if not os.path.exists(AUTH_LOG):
-        print(f"[WARNING] Log file not found: {AUTH_LOG}")
-        print("[WARNING] SSH monitoring requires Linux with /var/log/auth.log.")
-        print("[WARNING] SSH log monitor will retry every 30 seconds...")
-        while not os.path.exists(AUTH_LOG):
-            time.sleep(30)
+    # Find the correct log file
+    auth_log = find_auth_log()
+
+    if not auth_log:
+        print("[WARNING] No SSH log file found.")
+        print("[WARNING] On Kali Linux, install rsyslog if auth.log is missing:")
+        print("          sudo apt install rsyslog && sudo systemctl enable rsyslog --now")
+        print("[WARNING] SSH log monitor will retry every 15 seconds...")
+        while not auth_log:
+            time.sleep(15)
+            auth_log = find_auth_log()
+
+    print(f"[INFO] Monitoring SSH log: {auth_log}")
 
     try:
-        with open(AUTH_LOG, "r") as log_file:
+        with open(auth_log, "r") as log_file:
             # Move to the end of the file to only read new entries
             log_file.seek(0, 2)
 
@@ -48,7 +66,7 @@ def monitor_logs():
                     time.sleep(1)
 
     except PermissionError:
-        print(f"[ERROR] Permission denied reading {AUTH_LOG}.")
+        print(f"[ERROR] Permission denied reading {auth_log}.")
         print("[ERROR] Run with sudo: sudo python3 src/main.py")
     except (IOError, OSError) as e:
         print(f"[ERROR] Could not monitor log file: {e}")

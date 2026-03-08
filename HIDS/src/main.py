@@ -15,6 +15,7 @@ Modules:
 import threading
 import sys
 import os
+import time
 
 # Ensure the src/ directory is in the Python path
 sys.path.insert(0, os.path.dirname(__file__))
@@ -72,11 +73,13 @@ def main():
 
     print("\n[*] HIDS is now running. Press Ctrl+C to stop.\n")
 
-    # Step 4: Keep the main thread alive
+    # Step 4: Keep the main thread alive and monitor thread health
     try:
-        for t in threads:
-            while t.is_alive():
-                t.join(timeout=1)
+        while True:
+            for t in threads:
+                if not t.is_alive():
+                    print(f"[ERROR] {t.name} thread has stopped unexpectedly!")
+            time.sleep(1)
     except KeyboardInterrupt:
         print("\n[*] Shutting down HIDS. Goodbye.")
         sys.exit(0)

@@ -12,6 +12,7 @@ from utils import write_alert
 # Whitelist of known safe root processes.
 # Add legitimate system processes here to reduce false positives.
 WHITELISTED_PROCESSES = {
+    # Core system processes
     "systemd",
     "init",
     "kthreadd",
@@ -36,6 +37,54 @@ WHITELISTED_PROCESSES = {
     "udisksd",
     "unattended-upgr",
     "packagekitd",
+    # Systemd services
+    "systemd-journald",
+    "systemd-udevd",
+    "systemd-logind",
+    "systemd-resolved",
+    "systemd-timesyncd",
+    "systemd-network",
+    "systemd-oomd",
+    # Auth & session
+    "sudo",
+    "su",
+    "lightdm",
+    "gdm",
+    "gdm-session-wor",
+    "sddm",
+    # Display & desktop
+    "Xorg",
+    "Xwayland",
+    "xfce4-session",
+    "gnome-session-b",
+    "plasmashell",
+    # Audio & hardware
+    "pulseaudio",
+    "pipewire",
+    "pipewire-pulse",
+    "wireplumber",
+    "colord",
+    "rtkit-daemon",
+    "upowerd",
+    # Network & connectivity
+    "ModemManager",
+    "wpa_supplicant",
+    "bluetoothd",
+    "dhclient",
+    "avahi-daemon",
+    # Services
+    "cupsd",
+    "apache2",
+    "postgres",
+    "mysql",
+    "mariadbd",
+    # Kali-specific
+    "xfdesktop",
+    "xfwm4",
+    "xfce4-panel",
+    "xfsettingsd",
+    "panel-plugins",
+    "power-manager",
 }
 
 
@@ -57,11 +106,17 @@ def monitor_processes():
                     pid = proc_info.get("pid")
 
                     # Only inspect root-owned processes
-                    if username == "root" and proc_name not in WHITELISTED_PROCESSES:
-                        write_alert(
-                            f"[WARNING] Suspicious root process detected: "
-                            f"PID={pid} Name={proc_name} User={username}"
-                        )
+                    if username == "root" and proc_name and proc_name not in WHITELISTED_PROCESSES:
+                        # Skip kernel threads (they have no cmdline)
+                        try:
+                            cmdline = proc.cmdline()
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            cmdline = []
+                        if cmdline:
+                            write_alert(
+                                f"[WARNING] Suspicious root process detected: "
+                                f"PID={pid} Name={proc_name} User={username}"
+                            )
 
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     # Process ended or access denied — skip it
