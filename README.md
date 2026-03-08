@@ -98,7 +98,8 @@ HIDS/
 ```bash
 # 1. Clone the repository
 git clone https://github.com/MrSdas10/HIDS.git
-cd HIDS
+cd HIDS # Project Directory 
+cd HIDS # Main Directory
 
 # 2. (Optional) Create a virtual environment
 python3 -m venv venv
