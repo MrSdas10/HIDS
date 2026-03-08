@@ -92,7 +92,6 @@ HIDS/
 - Linux (Ubuntu, Kali Linux, Debian, CentOS, or Fedora)
 - Python 3.8+
 - `pip` package manager
-- **rsyslog** (recommended on Kali Linux for real SSH log monitoring; not required for manual testing)
 
 ### Steps
 
@@ -108,11 +107,19 @@ source venv/bin/activate
 # 3. Install dependencies
 pip install -r requirements.txt
 
-# 4. (Kali Linux only) Optional: Enable rsyslog for real SSH log monitoring
-# Without rsyslog, the HIDS will auto-create /var/log/auth.log for manual testing
-sudo apt install rsyslog
+# 4. (Kali Linux) Enable rsyslog and SSH for full testing
+# Kali uses systemd-journald by default. rsyslog bridges journal
+# entries to /var/log/auth.log so the HIDS can monitor them.
+# SSH server must be running for hydra brute-force testing.
+sudo apt install rsyslog -y
 sudo systemctl enable rsyslog --now
+sudo systemctl start ssh
 ```
+
+> **Why rsyslog?** Kali's default logger (systemd-journald) stores logs in binary journal format.
+> Our HIDS tails `/var/log/auth.log` (a text file). rsyslog bridges the gap:
+> `hydra → sshd → journald → rsyslog → /var/log/auth.log → HIDS detects it`.
+> Without rsyslog, real SSH events never reach auth.log.
 
 ---
 
@@ -168,24 +175,27 @@ echo "malicious change" >> monitored/important.txt
 
 ### Test 2: SSH Brute-Force Attack
 
+> **Pre-requisite:** Ensure rsyslog and SSH server are running (see Installation Step 4).
+
 **Option A:** Use `hydra` to simulate failed SSH login attempts.
 
 ```bash
+# Make sure SSH is running
+sudo systemctl start ssh
+
+# Run hydra brute-force attack
 hydra -l testuser -P /usr/share/wordlists/rockyou.txt ssh://127.0.0.1
 ```
 
-**Option B (recommended for quick testing):** Manually append a fake failed login line.
+**Option B (quick manual test without hydra):** Append a fake failed login line directly.
 
 ```bash
 echo "Mar  8 14:35:00 kali sshd[1234]: Failed password for testuser from 192.168.1.100 port 22 ssh2" | sudo tee -a /var/log/auth.log
 ```
 
-> **Note:** The SSH monitor uses `/var/log/auth.log`. If the file doesn't exist (common on Kali without rsyslog), the HIDS **automatically creates it** so manual testing works immediately.
+> **How it works:** `sshd` logs failed attempts → `systemd-journald` captures them → `rsyslog` writes them to `/var/log/auth.log` → HIDS detects the "Failed password" line.
 >
-> For real-world SSH monitoring, install rsyslog:
-> ```bash
-> sudo apt install rsyslog && sudo systemctl enable rsyslog --now
-> ```
+> If auth.log doesn't exist (no rsyslog), the HIDS auto-creates it so Option B still works.
 
 **Expected Output:**
 ```
@@ -206,6 +216,60 @@ sudo python3 -c "while True: pass"
 ```
 [2026-03-08 14:40:00] [WARNING] Suspicious root process detected: PID=9876 Name=python3 User=root
 ```
+
+---
+
+## Stopping the HIDS & Cleanup
+
+After you're done monitoring and testing, follow these steps to stop all services.
+
+### 1. Stop the HIDS
+
+Press `Ctrl+C` in the terminal where HIDS is running.
+
+### 2. Stop the SSH server
+
+```bash
+# Stop SSH (no longer accepts connections)
+sudo systemctl stop ssh
+
+# Disable SSH from starting on boot
+sudo systemctl disable ssh
+```
+
+### 3. Stop and disable rsyslog
+
+```bash
+# Stop rsyslog
+sudo systemctl stop rsyslog
+
+# Disable rsyslog from starting on boot
+sudo systemctl disable rsyslog
+```
+
+### 4. Kill any test processes
+
+```bash
+# If you left a test process running (e.g., sudo python3 -c "while True: pass")
+# Find and kill it:
+sudo pkill -f "while True: pass"
+```
+
+### 5. (Optional) Clean up test artifacts
+
+```bash
+# Reset the monitored file to its original state
+echo "This is a sensitive document. Do not modify." > monitored/important.txt
+
+# Clear the alerts log
+> alerts.log
+
+# Regenerate a fresh baseline
+sudo python3 src/main.py   # then Ctrl+C after baseline is created
+```
+
+> **Tip:** On Kali Linux, SSH and rsyslog are **disabled by default** for security.
+> Always disable them after testing to keep your system's default security posture.
 
 ---
 
