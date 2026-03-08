@@ -40,8 +40,8 @@ All alerts are timestamped and logged to both the console and an alert log file 
 |---------------------|---------------------------------------------|
 | `main.py`           | Entry point, thread orchestration           |
 | `file_monitor.py`   | SHA256 hashing, baseline comparison         |
-| `log_monitor.py`    | Auto-detects and tails SSH log for failed logins |
-| `process_monitor.py`| Scans for non-whitelisted root processes    |
+| `log_monitor.py`    | Monitors `/var/log/auth.log` for failed logins |
+| `process_monitor.py`| Prefix-matched whitelist for root processes     |
 | `utils.py`          | Hashing, baseline I/O, alert logging        |
 
 ---
@@ -49,9 +49,11 @@ All alerts are timestamped and logged to both the console and an alert log file 
 ## Features
 
 - SHA256 file integrity baseline and continuous comparison
-- Real-time SSH brute-force detection with **auto-detected log file** (`auth.log`, `syslog`, or `secure`)
-- Root process auditing with **expanded configurable whitelist** (40+ known safe processes)
+- Real-time SSH brute-force detection via `/var/log/auth.log` (auto-creates if missing for testing)
+- Root process auditing with **prefix-matched whitelist** (covers versioned process names like `python3.11`)
+- **PID deduplication** — each suspicious process is alerted only once, not every scan cycle
 - Kernel thread filtering to reduce false positives
+- Log rotation handling — re-seeks if auth.log is truncated
 - Thread health monitoring — alerts if a monitor thread dies unexpectedly
 - Timestamped alerts to console and `alerts.log`
 - Multi-threaded architecture (one thread per monitor)
@@ -90,7 +92,7 @@ HIDS/
 - Linux (Ubuntu, Kali Linux, Debian, CentOS, or Fedora)
 - Python 3.8+
 - `pip` package manager
-- **rsyslog** (required on Kali Linux for SSH log monitoring)
+- **rsyslog** (recommended on Kali Linux for real SSH log monitoring; not required for manual testing)
 
 ### Steps
 
@@ -106,7 +108,8 @@ source venv/bin/activate
 # 3. Install dependencies
 pip install -r requirements.txt
 
-# 4. (Kali Linux only) Enable rsyslog for SSH log monitoring
+# 4. (Kali Linux only) Optional: Enable rsyslog for real SSH log monitoring
+# Without rsyslog, the HIDS will auto-create /var/log/auth.log for manual testing
 sudo apt install rsyslog
 sudo systemctl enable rsyslog --now
 ```
@@ -177,12 +180,9 @@ hydra -l testuser -P /usr/share/wordlists/rockyou.txt ssh://127.0.0.1
 echo "Mar  8 14:35:00 kali sshd[1234]: Failed password for testuser from 192.168.1.100 port 22 ssh2" | sudo tee -a /var/log/auth.log
 ```
 
-> **Note:** The SSH monitor auto-detects the correct log file for your distro:
-> - Ubuntu/Debian/Kali: `/var/log/auth.log`
-> - Fallback: `/var/log/syslog`
-> - CentOS/RHEL/Fedora: `/var/log/secure`
+> **Note:** The SSH monitor uses `/var/log/auth.log`. If the file doesn't exist (common on Kali without rsyslog), the HIDS **automatically creates it** so manual testing works immediately.
 >
-> On Kali Linux, if no log file is found, install rsyslog:
+> For real-world SSH monitoring, install rsyslog:
 > ```bash
 > sudo apt install rsyslog && sudo systemctl enable rsyslog --now
 > ```
@@ -194,11 +194,13 @@ echo "Mar  8 14:35:00 kali sshd[1234]: Failed password for testuser from 192.168
 
 ### Test 3: Suspicious Root Process
 
-Run a suspicious process as root.
+Run a suspicious process as root. Wait ~10 seconds for the next process scan.
 
 ```bash
 sudo python3 -c "while True: pass"
 ```
+
+> **Note:** The process monitor uses **prefix matching** for the whitelist, so versioned names like `python3.11` are handled correctly. Each suspicious PID is alerted **only once** to avoid flooding.
 
 **Expected Output:**
 ```
