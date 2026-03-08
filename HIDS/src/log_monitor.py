@@ -9,46 +9,52 @@ import os
 
 from utils import write_alert
 
-# Possible SSH authentication log paths (varies by distro)
-AUTH_LOG_PATHS = [
-    "/var/log/auth.log",     # Ubuntu, Debian, Kali (with rsyslog)
-    "/var/log/syslog",       # Fallback on some distros
-    "/var/log/secure",       # CentOS, RHEL, Fedora
-]
+# Primary SSH authentication log path
+AUTH_LOG = "/var/log/auth.log"
 
 
-def find_auth_log():
-    """Find the first available SSH log file on the system."""
-    for path in AUTH_LOG_PATHS:
-        if os.path.exists(path):
-            return path
-    return None
+def ensure_auth_log():
+    """
+    Ensure /var/log/auth.log exists.
+    On Kali Linux, rsyslog may not be installed by default,
+    so auth.log may not exist. We create it for manual testing.
+    """
+    if not os.path.exists(AUTH_LOG):
+        print(f"[WARNING] {AUTH_LOG} does not exist.")
+        print("[WARNING] Creating it for manual testing...")
+        print("[WARNING] For real SSH monitoring, install rsyslog:")
+        print("          sudo apt install rsyslog && sudo systemctl enable rsyslog --now")
+        try:
+            with open(AUTH_LOG, "w") as f:
+                f.write("")
+            print(f"[INFO] Created {AUTH_LOG}")
+        except PermissionError:
+            print(f"[ERROR] Cannot create {AUTH_LOG}. Run with sudo.")
+            return False
+        except (IOError, OSError) as e:
+            print(f"[ERROR] Cannot create {AUTH_LOG}: {e}")
+            return False
+    return True
 
 
 def monitor_logs():
     """
-    Continuously tail the SSH authentication log and detect failed login attempts.
-    Automatically detects the correct log file for the distro.
+    Continuously tail /var/log/auth.log and detect failed SSH login attempts.
+    Creates the log file if it doesn't exist (for manual testing on Kali).
     This function is designed to run in its own thread.
     """
     print("[INFO] SSH log monitor started.")
 
-    # Find the correct log file
-    auth_log = find_auth_log()
+    if not ensure_auth_log():
+        print("[ERROR] SSH log monitor cannot start. Exiting thread.")
+        return
 
-    if not auth_log:
-        print("[WARNING] No SSH log file found.")
-        print("[WARNING] On Kali Linux, install rsyslog if auth.log is missing:")
-        print("          sudo apt install rsyslog && sudo systemctl enable rsyslog --now")
-        print("[WARNING] SSH log monitor will retry every 15 seconds...")
-        while not auth_log:
-            time.sleep(15)
-            auth_log = find_auth_log()
-
-    print(f"[INFO] Monitoring SSH log: {auth_log}")
+    print(f"[INFO] Monitoring SSH log: {AUTH_LOG}")
+    print(f"[INFO] To test, run in another terminal:")
+    print(f'        echo "Mar  8 14:35:00 kali sshd[1234]: Failed password for testuser from 192.168.1.100 port 22 ssh2" | sudo tee -a {AUTH_LOG}')
 
     try:
-        with open(auth_log, "r") as log_file:
+        with open(AUTH_LOG, "r") as log_file:
             # Move to the end of the file to only read new entries
             log_file.seek(0, 2)
 
@@ -62,11 +68,16 @@ def monitor_logs():
                             f"{line.strip()}"
                         )
                 else:
+                    # Handle log rotation: if file was truncated, re-seek
+                    current_pos = log_file.tell()
+                    file_size = os.path.getsize(AUTH_LOG)
+                    if file_size < current_pos:
+                        log_file.seek(0)
                     # No new lines — wait before checking again
                     time.sleep(1)
 
     except PermissionError:
-        print(f"[ERROR] Permission denied reading {auth_log}.")
+        print(f"[ERROR] Permission denied reading {AUTH_LOG}.")
         print("[ERROR] Run with sudo: sudo python3 src/main.py")
     except (IOError, OSError) as e:
         print(f"[ERROR] Could not monitor log file: {e}")
