@@ -60,7 +60,7 @@ All alerts are timestamped and logged to both the console and an alert log file 
 ## Directory Structure
 
 ```
-python-hids/
+HIDS/
 │
 ├── src/
 │   ├── main.py              # Entry point & thread manager
@@ -92,8 +92,8 @@ python-hids/
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/<your-username>/python-hids.git
-cd python-hids
+git clone https://github.com/MrSdas10/HIDS.git
+cd HIDS
 
 # 2. (Optional) Create a virtual environment
 python3 -m venv venv
@@ -226,28 +226,3 @@ sudo python3 -c "while True: pass"
 | json       | Baseline storage               |
 | os / time  | File system and timing ops     |
 
----
-
-## GitHub Workflow
-
-```bash
-# Initialize and push to GitHub
-git init
-git add .
-git commit -m "Initial Python HIDS project"
-git remote add origin https://github.com/<your-username>/python-hids.git
-git branch -M main
-git push -u origin main
-```
-
----
-
-## License
-
-This project is open source and available under the [MIT License](https://opensource.org/licenses/MIT).
-
----
-
-## Author
-
-Built as a cybersecurity portfolio project for SOC Analyst internship applications.
