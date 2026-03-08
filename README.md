@@ -274,33 +274,6 @@ sudo python3 src/main.py   # then Ctrl+C after baseline is created
 
 ---
 
-## Screenshots
-
-> Add screenshots of your HIDS running and detecting attacks here.
->
-> Suggested screenshots:
-> 1. HIDS startup output
-> 2. File modification alert
-> 3. SSH brute-force alert
-> 4. Suspicious process alert
-> 5. Contents of `alerts.log`
-
----
-
-## Future Improvements
-
-- [ ] **Email/Slack alerting** — Send real-time notifications on detection
-- [ ] **Web dashboard** — Flask/Django UI to visualize alerts
-- [ ] **Database logging** — Store alerts in SQLite or PostgreSQL
-- [ ] **Network monitoring** — Detect port scans and anomalous connections
-- [ ] **YARA rule integration** — Scan files for malware signatures
-- [ ] **Configuration file** — YAML/JSON config for whitelist, paths, intervals
-- [ ] **Log rotation support** — Handle auth.log rotation gracefully
-- [ ] **Systemd service** — Run HIDS as a background Linux service
-- [ ] **Unit tests** — pytest-based test suite for all modules
-
----
-
 ## Tech Stack
 
 | Technology | Purpose                        |
