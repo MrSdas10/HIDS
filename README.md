@@ -1,4 +1,4 @@
-# Python Host Intrusion Detection System (HIDS)
+# Host Intrusion Detection System (HIDS)
 
 A lightweight, multi-threaded Linux-based Host Intrusion Detection System built with Python. Designed as a real-world cybersecurity portfolio project for SOC Analyst internships.
 
