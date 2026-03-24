@@ -83,7 +83,7 @@ Python dependencies (from `requirements.txt`):
 
 ```bash
 git clone https://github.com/MrSdas10/HIDS.git 
-cd hids-project/HIDS
+cd HIDS
 ```
 
 ### Step 2: Create and activate virtual environment
@@ -120,7 +120,7 @@ Why this step matters:
 Run in terminal 1:
 
 ```bash
-cd hids-project/HIDS
+cd HIDS
 source .venv/bin/activate
 sudo .venv/bin/python src/main.py
 ```
@@ -138,7 +138,7 @@ What happens on startup:
 Run in terminal 2:
 
 ```bash
-cd hids-project/HIDS
+cd HIDS
 source .venv/bin/activate
 .venv/bin/python src/report_download_server.py
 ```
@@ -192,7 +192,7 @@ Supported `event_type` values:
 ### Option B: From CLI
 
 ```bash
-cd hids-project/HIDS
+cd HIDS
 source .venv/bin/activate
 .venv/bin/python src/report_generator.py --input alerts.log --output hids_report.pdf
 ```
