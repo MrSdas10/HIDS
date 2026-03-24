@@ -82,7 +82,7 @@ Python dependencies (from `requirements.txt`):
 ### Step 1: Clone and open project
 
 ```bash
-git clone https://github.com/MrSdas10/HIDS.git hids-project
+git clone https://github.com/MrSdas10/HIDS.git 
 cd hids-project/HIDS
 ```
 
