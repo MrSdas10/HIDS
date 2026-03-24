@@ -1,287 +1,305 @@
 # Host Intrusion Detection System (HIDS)
 
-A lightweight, multi-threaded Linux-based Host Intrusion Detection System built with Python. Designed as a real-world cybersecurity portfolio project for SOC Analyst internships.
+A lightweight, modular Linux HIDS built with Python.
+
+This project monitors a host for:
+
+- file integrity changes
+- SSH brute-force behavior
+- suspicious root processes
+
+It also includes:
+
+- automatic IP blocking (iptables or nftables)
+- a live Flask dashboard
+- attack simulation buttons
+- downloadable PDF incident reports
 
 ---
 
-## Project Description
+## 1. What This Project Detects
 
-This HIDS monitors a Linux host for common indicators of compromise (IOCs):
+### File Integrity Monitor
 
-- **File integrity violations** — detects unauthorized modification or deletion of critical files.
-- **SSH brute-force login attempts** — monitors authentication logs for repeated failed password entries.
-- **Suspicious root processes** — flags unknown processes running with root privileges.
+- file modified
+- file deleted
+- new file appears in monitored folder
 
-All alerts are timestamped and logged to both the console and an alert log file for forensic review.
+### SSH Log Monitor
 
----
+- multiple failed SSH logins from same IP within 2 minutes
+- successful login after multiple failures
+- optional automatic temporary IP blocking
 
-## Architecture Overview
+### Process Monitor
 
-```
-┌─────────────────────────────────────────────────┐
-│                   main.py                       │
-│          (Initializer & Thread Manager)         │
-├────────────────┬───────────────┬────────────────┤
-│  Thread 1      │  Thread 2     │  Thread 3      │
-│  File Monitor  │  SSH Log Mon. │  Process Mon.  │
-│  (5s interval) │  (continuous) │  (10s interval)│
-├────────────────┴───────────────┴────────────────┤
-│                   utils.py                      │
-│     (Hashing, Baseline I/O, Alert Logging)      │
-└─────────────────────────────────────────────────┘
-         │                           │
-    baseline.json               alerts.log
-```
-
-### Module Breakdown
-
-| Module              | Responsibility                              |
-|---------------------|---------------------------------------------|
-| `main.py`           | Entry point, thread orchestration           |
-| `file_monitor.py`   | SHA256 hashing, baseline comparison         |
-| `log_monitor.py`    | Monitors `/var/log/auth.log` for failed logins |
-| `process_monitor.py`| Prefix-matched whitelist for root processes     |
-| `utils.py`          | Hashing, baseline I/O, alert logging        |
+- root-owned process not matching trusted whitelist
 
 ---
 
-## Features
+## 2. Current Project Structure
 
-- SHA256 file integrity baseline and continuous comparison
-- Real-time SSH brute-force detection via `/var/log/auth.log` (auto-creates if missing for testing)
-- Root process auditing with **prefix-matched whitelist** (covers versioned process names like `python3.11`)
-- **PID deduplication** — each suspicious process is alerted only once, not every scan cycle
-- Kernel thread filtering to reduce false positives
-- Log rotation handling — re-seeks if auth.log is truncated
-- Thread health monitoring — alerts if a monitor thread dies unexpectedly
-- Timestamped alerts to console and `alerts.log`
-- Multi-threaded architecture (one thread per monitor)
-- Compatible with **Kali Linux**, Ubuntu, Debian, CentOS, and Fedora
-- Clean, modular, well-commented code (~250 lines)
-
----
-
-## Directory Structure
-
-```
+```text
 HIDS/
-│
-├── src/
-│   ├── main.py              # Entry point & thread manager
-│   ├── file_monitor.py      # File integrity monitoring
-│   ├── log_monitor.py       # SSH log monitoring
-│   ├── process_monitor.py   # Suspicious process detection
-│   └── utils.py             # Shared utility functions
-│
+├── alerts.log                  # Alert output (auto-generated)
+├── baseline.json               # File integrity baseline
+├── blocked_ips.json            # Temporary ban state (auto-generated)
 ├── monitored/
-│   └── important.txt        # Sample file to monitor
-│
-├── baseline.json            # File hash baseline (auto-generated)
-├── alerts.log               # Alert output log
-├── requirements.txt         # Python dependencies
-└── README.md                # Project documentation
+│   └── important.txt
+├── reports/                    # Generated PDF reports (auto-generated)
+├── requirements.txt
+└── src/
+    ├── main.py                 # Starts all monitoring threads
+    ├── file_monitor.py         # File integrity detection
+    ├── log_monitor.py          # SSH detection + IP block/unblock
+    ├── process_monitor.py      # Suspicious root process detection
+    ├── utils.py                # Shared helpers + alert descriptions
+    ├── simulation.py           # Fake attack event generator
+    ├── report_generator.py     # PDF report generation
+    └── report_download_server.py  # Flask dashboard + simulation + download
 ```
 
 ---
 
-## Installation
+## 3. Requirements
 
-### Prerequisites
-
-- Linux (Ubuntu, Kali Linux, Debian, CentOS, or Fedora)
+- Linux host (Ubuntu/Kali/Debian/Fedora/CentOS)
 - Python 3.8+
-- `pip` package manager
+- sudo/root privileges for full functionality
+- SSH logs available in `/var/log/auth.log`
 
-### Steps
+Python dependencies (from `requirements.txt`):
+
+- psutil
+- watchdog
+- Flask
+- fpdf2
+
+---
+
+## 4. Installation (Step by Step)
+
+### Step 1: Clone and open project
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/MrSdas10/HIDS.git
-cd HIDS # Project Directory 
-cd HIDS # Main Directory
+git clone https://github.com/MrSdas10/HIDS.git hids-project
+cd hids-project/HIDS
+```
 
-# 2. (Optional) Create a virtual environment
-python3 -m venv venv
-source venv/bin/activate
+### Step 2: Create and activate virtual environment
 
-# 3. Install dependencies
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+### Step 3: Install dependencies
+
+```bash
 pip install -r requirements.txt
+```
 
-# 4. (Kali Linux) Enable rsyslog and SSH for full testing
-# Kali uses systemd-journald by default. rsyslog bridges journal
-# entries to /var/log/auth.log so the HIDS can monitor them.
-# SSH server must be running for hydra brute-force testing.
-sudo apt install rsyslog -y
+### Step 4: Enable auth logging and SSH service (Kali/Ubuntu style)
+
+```bash
+sudo apt update
+sudo apt install -y rsyslog openssh-server
 sudo systemctl enable rsyslog --now
-sudo systemctl start ssh
+sudo systemctl enable ssh --now
 ```
 
-> **Why rsyslog?** Kali's default logger (systemd-journald) stores logs in binary journal format.
-> Our HIDS tails `/var/log/auth.log` (a text file). rsyslog bridges the gap:
-> `hydra → sshd → journald → rsyslog → /var/log/auth.log → HIDS detects it`.
-> Without rsyslog, real SSH events never reach auth.log.
+Why this step matters:
+
+- the SSH monitor tails `/var/log/auth.log`
+- if auth events never reach this file, brute-force detection will not trigger
 
 ---
 
-## How to Run
+## 5. Run HIDS Monitors
+
+Run in terminal 1:
 
 ```bash
-# Run with sudo (required for reading auth.log and process info)
-sudo python3 src/main.py
+cd hids-project/HIDS
+source .venv/bin/activate
+sudo .venv/bin/python src/main.py
 ```
 
-### Expected Startup Output
+What happens on startup:
 
+- baseline is created/refreshed
+- three monitor threads start
+- alerts are printed and appended to `alerts.log`
+
+---
+
+## 6. Run Flask Dashboard
+
+Run in terminal 2:
+
+```bash
+cd hids-project/HIDS
+source .venv/bin/activate
+.venv/bin/python src/report_download_server.py
 ```
-============================================================
-   Python Host Intrusion Detection System (HIDS)
-   Lightweight Linux Security Monitoring Tool
-============================================================
-   Modules:
-     [1] File Integrity Monitor
-     [2] SSH Brute-Force Log Monitor
-     [3] Suspicious Process Monitor
-============================================================
 
-[*] Initializing file integrity baseline...
-[INFO] Baseline saved to baseline.json
-[INFO] Baseline created with 1 file(s).
+Open browser:
 
-[*] Starting monitoring threads...
+- `http://127.0.0.1:5001/`
 
-    [+] FileMonitor thread started.
-    [+] SSHLogMonitor thread started.
-    [+] ProcessMonitor thread started.
+Dashboard features:
 
-[*] HIDS is now running. Press Ctrl+C to stop.
+- live alert table (auto-refresh)
+- risk summary cards
+- simulation buttons
+- PDF download button
+
+---
+
+## 7. Simulate Attacks (Same Detection Pipeline)
+
+The dashboard buttons write events into real monitored sources, so detections run through the same pipeline as real attacks.
+
+### Option A: From Dashboard buttons
+
+- Simulate SSH Brute Force
+- Simulate File Modification
+- Simulate Full Attack Chain
+
+### Option B: From API (localhost only by default)
+
+```bash
+curl -X POST http://127.0.0.1:5001/api/simulate \
+    -H "Content-Type: application/json" \
+    -d '{"event_type":"full_attack_chain"}'
+```
+
+Supported `event_type` values:
+
+- `ssh_bruteforce`
+- `file_modification`
+- `full_attack_chain`
+
+---
+
+## 8. Generate and Download PDF Report
+
+### Option A: From dashboard
+
+- Click **Download PDF Report**
+- A timestamped report is generated and downloaded
+
+### Option B: From CLI
+
+```bash
+cd hids-project/HIDS
+source .venv/bin/activate
+.venv/bin/python src/report_generator.py --input alerts.log --output hids_report.pdf
+```
+
+Report includes:
+
+- total alerts and risk breakdown
+- incident details (time, IP, type, risk)
+- explanation by attack type
+- actions taken (for example IP blocked/unblocked)
+
+---
+
+## 9. Security Behavior and Safe Defaults
+
+- dashboard endpoints are localhost-only by default
+- simulation endpoint is localhost-only
+- report download endpoint is localhost-only
+- loopback addresses are never blocked by `block_ip()`
+- IP blocking supports nftables or iptables/ip6tables
+- temporary bans auto-expire and unblocking is automatic
+
+If you intentionally need remote access:
+
+```bash
+.venv/bin/python src/report_download_server.py --host 0.0.0.0 --allow-remote
+```
+
+Important: only do this behind proper firewall/authentication.
+
+---
+
+## 10. Example End-to-End Workflow
+
+1. Start monitor engine in terminal 1 (`src/main.py` with sudo).
+2. Start dashboard in terminal 2 (`src/report_download_server.py`).
+3. Open dashboard and click **Simulate Full Attack Chain**.
+4. Watch alerts appear in real time.
+5. Click **Download PDF Report**.
+6. Verify report content in `reports/` and downloaded file.
+
+---
+
+## 11. Common Troubleshooting
+
+### No SSH alerts appear
+
+- ensure `rsyslog` is running
+- ensure SSH service is active
+- verify `/var/log/auth.log` receives new entries
+
+### Permission errors reading auth.log or firewall operations
+
+- run monitor process with `sudo`
+
+### Dashboard loads but no data
+
+- confirm `alerts.log` exists and has entries
+- keep `src/main.py` running while testing
+
+### PDF import error (`fpdf` not found)
+
+- reinstall dependencies:
+
+```bash
+pip install -r requirements.txt
 ```
 
 ---
 
-## Attack Simulation & Testing
+## 12. Stop and Cleanup
 
-### Test 1: File Tampering
+### Stop services
 
-Modify a monitored file to trigger a file integrity alert.
+- press `Ctrl+C` in monitor and dashboard terminals
 
-```bash
-echo "malicious change" >> monitored/important.txt
-```
-
-**Expected Output:**
-```
-[2026-03-08 14:30:00] [ALERT] File MODIFIED detected: /path/to/monitored/important.txt
-```
-
-### Test 2: SSH Brute-Force Attack
-
-> **Pre-requisite:** Ensure rsyslog and SSH server are running (see Installation Step 4).
-
-**Option A:** Use `hydra` to simulate failed SSH login attempts.
+### Optional cleanup
 
 ```bash
-# Make sure SSH is running
-sudo systemctl start ssh
-
-# Run hydra brute-force attack
-hydra -l testuser -P /usr/share/wordlists/rockyou.txt ssh://127.0.0.1
-```
-
-**Option B (quick manual test without hydra):** Append a fake failed login line directly.
-
-```bash
-echo "Mar  8 14:35:00 kali sshd[1234]: Failed password for testuser from 192.168.1.100 port 22 ssh2" | sudo tee -a /var/log/auth.log
-```
-
-> **How it works:** `sshd` logs failed attempts → `systemd-journald` captures them → `rsyslog` writes them to `/var/log/auth.log` → HIDS detects the "Failed password" line.
->
-> If auth.log doesn't exist (no rsyslog), the HIDS auto-creates it so Option B still works.
-
-**Expected Output:**
-```
-[2026-03-08 14:35:00] [ALERT] Failed SSH login attempt detected: Mar  8 14:35:00 kali sshd[1234]: Failed password for testuser from 192.168.1.100 port 22 ssh2
-```
-
-### Test 3: Suspicious Root Process
-
-Run a suspicious process as root. Wait ~10 seconds for the next process scan.
-
-```bash
-sudo python3 -c "while True: pass"
-```
-
-> **Note:** The process monitor uses **prefix matching** for the whitelist, so versioned names like `python3.11` are handled correctly. Each suspicious PID is alerted **only once** to avoid flooding.
-
-**Expected Output:**
-```
-[2026-03-08 14:40:00] [WARNING] Suspicious root process detected: PID=9876 Name=python3 User=root
-```
-
----
-
-## Stopping the HIDS & Cleanup
-
-After you're done monitoring and testing, follow these steps to stop all services.
-
-### 1. Stop the HIDS
-
-Press `Ctrl+C` in the terminal where HIDS is running.
-
-### 2. Stop the SSH server
-
-```bash
-# Stop SSH (no longer accepts connections)
-sudo systemctl stop ssh
-
-# Disable SSH from starting on boot
-sudo systemctl disable ssh
-```
-
-### 3. Stop and disable rsyslog
-
-```bash
-# Stop rsyslog
-sudo systemctl stop rsyslog
-
-# Disable rsyslog from starting on boot
-sudo systemctl disable rsyslog
-```
-
-### 4. Kill any test processes
-
-```bash
-# If you left a test process running (e.g., sudo python3 -c "while True: pass")
-# Find and kill it:
-sudo pkill -f "while True: pass"
-```
-
-### 5. (Optional) Clean up test artifacts
-
-```bash
-# Reset the monitored file to its original state
-echo "This is a sensitive document. Do not modify." > monitored/important.txt
-
-# Clear the alerts log
 > alerts.log
-
-# Regenerate a fresh baseline
-sudo python3 src/main.py   # then Ctrl+C after baseline is created
+rm -f blocked_ips.json
+rm -f reports/*.pdf
 ```
 
-> **Tip:** On Kali Linux, SSH and rsyslog are **disabled by default** for security.
-> Always disable them after testing to keep your system's default security posture.
+### Optional: disable test services on Kali after testing
+
+```bash
+sudo systemctl stop ssh rsyslog
+sudo systemctl disable ssh rsyslog
+```
 
 ---
 
-## Tech Stack
+## 13. Tech Stack
 
-| Technology | Purpose                        |
-|------------|--------------------------------|
-| Python 3   | Core language                  |
-| psutil     | Process inspection             |
-| hashlib    | SHA256 file hashing            |
-| threading  | Concurrent module execution    |
-| json       | Baseline storage               |
-| os / time  | File system and timing ops     |
+- Python (threading, subprocess, json, hashlib)
+- psutil
+- Flask
+- fpdf2
+
+---
+
+## 14. Next Recommended Improvements
+
+- add authentication for dashboard in remote mode
+- add HTTPS reverse proxy (Nginx/Caddy)
+- move settings to config file (YAML/JSON)
+- add pytest test suite and CI checks
+- add alert persistence in SQLite/PostgreSQL
 

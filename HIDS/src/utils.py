@@ -76,3 +76,68 @@ def write_alert(message):
             f.write(alert_line + "\n")
     except (IOError, OSError) as e:
         print(f"[ERROR] Could not write to alert log: {e}")
+
+
+def describe_alert(alert_type):
+    """
+    Return a beginner-friendly explanation for a given alert type.
+
+    Args:
+        alert_type (str): Examples: "brute_force", "file_change",
+                          "privilege_escalation"
+
+    Returns:
+        dict: {
+            "explanation": str,
+            "risk_level": "Low" | "Medium" | "High",
+            "suggested_mitigation": str
+        }
+    """
+    alert_map = {
+        "brute_force": {
+            "explanation": (
+                "Many login attempts were made in a short time. "
+                "This may mean someone is trying to guess a password."
+            ),
+            "risk_level": "High",
+            "suggested_mitigation": (
+                "Block the source IP, enable account lockout or fail2ban, "
+                "and use strong passwords with MFA."
+            ),
+        },
+        "file_change": {
+            "explanation": (
+                "A monitored file was changed, deleted, or a new file appeared. "
+                "This could be normal maintenance or unauthorized tampering."
+            ),
+            "risk_level": "Medium",
+            "suggested_mitigation": (
+                "Check who changed the file, compare it with a trusted backup, "
+                "and restore it if the change is suspicious."
+            ),
+        },
+        "privilege_escalation": {
+            "explanation": (
+                "A process or user may have gained higher permissions than expected, "
+                "such as root/admin access."
+            ),
+            "risk_level": "High",
+            "suggested_mitigation": (
+                "Review recent sudo/admin activity, terminate unknown privileged "
+                "processes, rotate credentials, and patch vulnerable software."
+            ),
+        },
+    }
+
+    normalized = (alert_type or "").strip().lower()
+    if normalized in alert_map:
+        return alert_map[normalized]
+
+    return {
+        "explanation": "This alert type is not recognized yet.",
+        "risk_level": "Low",
+        "suggested_mitigation": (
+            "Collect more logs, verify if activity is expected, and add a "
+            "specific rule for this alert type."
+        ),
+    }

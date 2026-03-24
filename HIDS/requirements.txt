@@ -1,2 +1,4 @@
 psutil
 watchdog
+fpdf2
+Flask
