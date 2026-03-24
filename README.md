@@ -63,11 +63,6 @@ HIDS/
 
 ## 3. Requirements
 
-- Linux host (Ubuntu/Kali/Debian/Fedora/CentOS)
-- Python 3.8+
-- sudo/root privileges for full functionality
-- SSH logs available in `/var/log/auth.log`
-
 Python dependencies (from `requirements.txt`):
 
 - psutil
@@ -75,98 +70,218 @@ Python dependencies (from `requirements.txt`):
 - Flask
 - fpdf2
 
+Feature note:
+
+- full SSH and firewall blocking features are Linux features
+- Windows users should use WSL2 (recommended) for full functionality
+
 ---
 
-## 4. Installation (Step by Step)
+## 4. Windows Setup and Usage (First)
 
-### Step 1: Clone and open project
+This section is for Windows users.
 
-```bash
-git clone https://github.com/MrSdas10/HIDS.git 
-cd HIDS
-```
+### 4.1 Recommended: Use WSL2 (full features)
 
-### Step 2: Create and activate virtual environment
+Why: this project monitors `/var/log/auth.log` and uses Linux firewall commands. Those are Linux-native.
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
-### Step 3: Install dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### Step 4: Enable auth logging and SSH service (Kali/Ubuntu style)
+### Step 1: Open WSL terminal and install packages
 
 ```bash
 sudo apt update
-sudo apt install -y rsyslog openssh-server
+sudo apt install -y git python3 python3-venv python3-pip rsyslog openssh-server
 sudo systemctl enable rsyslog --now
 sudo systemctl enable ssh --now
 ```
 
-Why this step matters:
-
-- the SSH monitor tails `/var/log/auth.log`
-- if auth events never reach this file, brute-force detection will not trigger
-
----
-
-## 5. Run HIDS Monitors
-
-Run in terminal 1:
+### Step 2: Clone project in WSL and enter project root
 
 ```bash
-cd HIDS
+git clone https://github.com/MrSdas10/HIDS.git hids-project
+cd hids-project/HIDS
+```
+
+### Step 3: Create venv and install Python dependencies
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+### Step 4: Run HIDS engine (manual core)
+
+Terminal 1:
+
+```bash
+cd ~/hids-project/HIDS
 source .venv/bin/activate
 sudo .venv/bin/python src/main.py
 ```
 
-What happens on startup:
+### Step 5: Run dashboard
 
-- baseline is created/refreshed
-- three monitor threads start
-- alerts are printed and appended to `alerts.log`
+Terminal 2:
+
+```bash
+cd ~/hids-project/HIDS
+source .venv/bin/activate
+.venv/bin/python src/report_download_server.py
+```
+
+Open browser in Windows:
+
+- http://127.0.0.1:5001/
+
+### Step 6A: Manual testing (1 by 1)
+
+Terminal 3:
+
+```bash
+cd ~/hids-project/HIDS
+echo "manual tamper test" >> monitored/important.txt
+```
+
+Terminal 4:
+
+```bash
+sudo bash -c 'for i in {1..3}; do echo "Mar 24 12:00:0$i hids sshd[$((3000+i))]: Failed password for invalid user admin from 203.0.113.77 port 22 ssh2" >> /var/log/auth.log; done'
+```
+
+Expected in Terminal 1:
+
+- file modified alert
+- SSH brute-force alert
+- optional IP blocked action log
+
+### Step 6B: Button-based testing
+
+On dashboard click:
+
+1. Simulate SSH Brute Force
+2. Simulate File Modification
+3. Simulate Full Attack Chain
+
+Expected:
+
+- alerts table updates automatically
+- risk cards update
+- events are appended to `alerts.log`
+
+### Step 7: Report generation
+
+Option 1 (button): click Download PDF Report.
+
+Option 2 (CLI):
+
+```bash
+cd ~/hids-project/HIDS
+source .venv/bin/activate
+.venv/bin/python src/report_generator.py --input alerts.log --output hids_report_windows.pdf
+```
 
 ---
 
-## 6. Run Flask Dashboard
+## 5. Linux Setup and Usage (Second)
 
-Run in terminal 2:
+This section is for native Linux users (Kali/Ubuntu/Debian/Fedora/CentOS).
+
+### Step 1: Install system packages
+
+Kali/Ubuntu/Debian:
 
 ```bash
-cd HIDS
+sudo apt update
+sudo apt install -y git python3 python3-venv python3-pip rsyslog openssh-server
+sudo systemctl enable rsyslog --now
+sudo systemctl enable ssh --now
+```
+
+### Step 2: Clone and enter project root
+
+```bash
+git clone https://github.com/MrSdas10/HIDS.git hids-project
+cd hids-project/HIDS
+```
+
+### Step 3: Create venv and install dependencies
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+### Step 4: Start monitor engine
+
+Terminal 1:
+
+```bash
+cd ~/hids-project/HIDS
+source .venv/bin/activate
+sudo .venv/bin/python src/main.py
+```
+
+### Step 5: Start dashboard
+
+Terminal 2:
+
+```bash
+cd ~/hids-project/HIDS
 source .venv/bin/activate
 .venv/bin/python src/report_download_server.py
 ```
 
 Open browser:
 
-- `http://127.0.0.1:5001/`
+- http://127.0.0.1:5001/
 
-Dashboard features:
+### Step 6A: Manual testing (1 by 1)
 
-- live alert table (auto-refresh)
-- risk summary cards
-- simulation buttons
-- PDF download button
+Terminal 3 (file change):
+
+```bash
+cd ~/hids-project/HIDS
+echo "manual tamper test" >> monitored/important.txt
+```
+
+Terminal 4 (SSH brute-force lines):
+
+```bash
+sudo bash -c 'for i in {1..3}; do echo "Mar 24 12:00:0$i hids sshd[$((3000+i))]: Failed password for invalid user admin from 203.0.113.77 port 22 ssh2" >> /var/log/auth.log; done'
+```
+
+Expected in Terminal 1:
+
+- file modified alert
+- SSH brute-force alert
+- optional IP blocked action log
+
+### Step 6B: Button-based testing
+
+On dashboard click:
+
+1. Simulate SSH Brute Force
+2. Simulate File Modification
+3. Simulate Full Attack Chain
+
+### Step 7: Report generation
+
+Option 1 (button): click Download PDF Report.
+
+Option 2 (CLI):
+
+```bash
+cd ~/hids-project/HIDS
+source .venv/bin/activate
+.venv/bin/python src/report_generator.py --input alerts.log --output hids_report_linux.pdf
+```
 
 ---
 
-## 7. Simulate Attacks (Same Detection Pipeline)
+## 6. Optional API Testing (No UI)
 
-The dashboard buttons write events into real monitored sources, so detections run through the same pipeline as real attacks.
-
-### Option A: From Dashboard buttons
-
-- Simulate SSH Brute Force
-- Simulate File Modification
-- Simulate Full Attack Chain
-
-### Option B: From API (localhost only by default)
+If you want to trigger simulation from terminal:
 
 ```bash
 curl -X POST http://127.0.0.1:5001/api/simulate \
@@ -176,37 +291,13 @@ curl -X POST http://127.0.0.1:5001/api/simulate \
 
 Supported `event_type` values:
 
-- `ssh_bruteforce`
-- `file_modification`
-- `full_attack_chain`
+- ssh_bruteforce
+- file_modification
+- full_attack_chain
 
 ---
 
-## 8. Generate and Download PDF Report
-
-### Option A: From dashboard
-
-- Click **Download PDF Report**
-- A timestamped report is generated and downloaded
-
-### Option B: From CLI
-
-```bash
-cd HIDS
-source .venv/bin/activate
-.venv/bin/python src/report_generator.py --input alerts.log --output hids_report.pdf
-```
-
-Report includes:
-
-- total alerts and risk breakdown
-- incident details (time, IP, type, risk)
-- explanation by attack type
-- actions taken (for example IP blocked/unblocked)
-
----
-
-## 9. Security Behavior and Safe Defaults
+## 7. Security Behavior and Safe Defaults
 
 - dashboard endpoints are localhost-only by default
 - simulation endpoint is localhost-only
@@ -225,7 +316,7 @@ Important: only do this behind proper firewall/authentication.
 
 ---
 
-## 10. Example End-to-End Workflow
+## 8. Quick End-to-End Flow
 
 1. Start monitor engine in terminal 1 (`src/main.py` with sudo).
 2. Start dashboard in terminal 2 (`src/report_download_server.py`).
@@ -236,7 +327,53 @@ Important: only do this behind proper firewall/authentication.
 
 ---
 
-## 11. Common Troubleshooting
+## 9. Common Troubleshooting
+
+### Kali path error: `can't open file ... src/main.py`
+
+If you see errors like:
+
+- `.venv/bin/python: can't open file '/home/user/HIDS/src/main.py'`
+- `source: no such file or directory: .venv/bin/activate`
+
+it usually means you are in the wrong folder, or `.venv` was created in a different folder.
+
+Run these commands exactly:
+
+```bash
+# 1) Go to outer repo folder
+cd ~/HIDS
+
+# 2) Find where main.py actually exists
+find . -maxdepth 3 -type f -name main.py
+
+# 3) Enter the real project root (example output: ./HIDS/src/main.py)
+cd ~/HIDS/HIDS
+
+# 4) Verify this folder has src and requirements.txt
+pwd
+ls
+
+# 5) Create venv INSIDE this same folder
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+
+# 6) Run monitors
+sudo "$(pwd)/.venv/bin/python" src/main.py
+```
+
+In a second terminal:
+
+```bash
+cd ~/HIDS/HIDS
+source .venv/bin/activate
+"$(pwd)/.venv/bin/python" src/report_download_server.py
+```
+
+Open dashboard:
+
+- `http://127.0.0.1:5001/`
 
 ### No SSH alerts appear
 
@@ -263,7 +400,7 @@ pip install -r requirements.txt
 
 ---
 
-## 12. Stop and Cleanup
+## 10. Stop and Cleanup
 
 ### Stop services
 
@@ -286,7 +423,7 @@ sudo systemctl disable ssh rsyslog
 
 ---
 
-## 13. Tech Stack
+## 11. Tech Stack
 
 - Python (threading, subprocess, json, hashlib)
 - psutil
@@ -295,7 +432,7 @@ sudo systemctl disable ssh rsyslog
 
 ---
 
-## 14. Next Recommended Improvements
+## 12. Next Recommended Improvements
 
 - add authentication for dashboard in remote mode
 - add HTTPS reverse proxy (Nginx/Caddy)
