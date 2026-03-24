@@ -141,6 +141,14 @@ class HIDSReportPDF(FPDF):
         self.set_text_color(0, 0, 0)
 
 
+def safe_multicell(pdf, text, line_height=6):
+    """Render wrapped text safely even for very long unbroken strings."""
+    pdf.set_x(pdf.l_margin)
+    safe_text = (text or "").replace("\t", " ").replace("\r", " ")
+    cell_width = getattr(pdf, "epw", pdf.w - pdf.l_margin - pdf.r_margin)
+    pdf.multi_cell(cell_width, line_height, safe_text, wrapmode="CHAR")
+
+
 def add_summary_section(pdf, summary):
     """Render summary block."""
     pdf.section_title("1. Summary")
@@ -191,7 +199,7 @@ def add_explanations_section(pdf, incidents):
     unique_types = sorted({incident["type"] for incident in incidents if incident["type"] != "unknown"})
     if not unique_types:
         pdf.set_font("Helvetica", "", 10)
-        pdf.multi_cell(0, 6, "No known attack types found in current incidents.")
+        safe_multicell(pdf, "No known attack types found in current incidents.")
         pdf.ln(2)
         return
 
@@ -204,9 +212,9 @@ def add_explanations_section(pdf, incidents):
 
         pdf.set_text_color(0, 0, 0)
         pdf.set_font("Helvetica", "", 10)
-        pdf.multi_cell(0, 6, f"What happened: {details['explanation']}")
-        pdf.multi_cell(0, 6, f"Risk level: {details['risk_level']}")
-        pdf.multi_cell(0, 6, f"Suggested mitigation: {details['suggested_mitigation']}")
+        safe_multicell(pdf, f"What happened: {details['explanation']}")
+        safe_multicell(pdf, f"Risk level: {details['risk_level']}")
+        safe_multicell(pdf, f"Suggested mitigation: {details['suggested_mitigation']}")
         pdf.ln(1)
 
 
@@ -216,12 +224,12 @@ def add_actions_section(pdf, actions):
     pdf.set_font("Helvetica", "", 10)
 
     if not actions:
-        pdf.multi_cell(0, 6, "No actions were recorded.")
+        safe_multicell(pdf, "No actions were recorded.")
         return
 
     for action in actions:
         line = f"{action['time']} | IP: {action['ip']} | {action['message']}"
-        pdf.multi_cell(0, 6, line)
+        safe_multicell(pdf, line)
 
 
 def generate_hids_report(alert_log_path=ALERT_LOG, output_path=DEFAULT_REPORT_NAME):

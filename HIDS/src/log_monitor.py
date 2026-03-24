@@ -21,6 +21,10 @@ from utils import write_alert
 
 # Primary SSH authentication log path
 AUTH_LOG = "/var/log/auth.log"
+FALLBACK_AUTH_LOG = os.path.join(
+    os.path.dirname(os.path.dirname(__file__)),
+    "simulated_auth.log",
+)
 
 # Detection tuning
 WINDOW_SECONDS = 120
@@ -42,12 +46,46 @@ NFT_CHAIN = "input"
 IP_REGEX = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 
 
-def ensure_auth_log():
+def get_auth_log_path():
+    """Return the currently selected auth log path."""
+    return AUTH_LOG
+
+
+def _ensure_fallback_auth_log(require_write=False):
+    """Switch to and ensure a writable/readable local auth log file."""
+    global AUTH_LOG
+    AUTH_LOG = FALLBACK_AUTH_LOG
+
+    try:
+        if not os.path.exists(AUTH_LOG):
+            with open(AUTH_LOG, "w") as f:
+                f.write("")
+
+        if require_write and not os.access(AUTH_LOG, os.W_OK):
+            print(f"[ERROR] Fallback auth log is not writable: {AUTH_LOG}")
+            return False
+        if not os.access(AUTH_LOG, os.R_OK):
+            print(f"[ERROR] Fallback auth log is not readable: {AUTH_LOG}")
+            return False
+
+        print(f"[INFO] Using fallback auth log: {AUTH_LOG}")
+        return True
+    except (IOError, OSError, PermissionError) as e:
+        print(f"[ERROR] Cannot prepare fallback auth log {AUTH_LOG}: {e}")
+        return False
+
+
+def ensure_auth_log(require_write=False):
     """
-    Ensure /var/log/auth.log exists.
+    Ensure auth log exists and is accessible.
     On Kali Linux, rsyslog may not be installed by default,
-    so auth.log may not exist. We create it for manual testing.
+    so auth.log may not exist. If system auth log is not accessible,
+    automatically fall back to a local project log file.
     """
+    global AUTH_LOG
+
+    AUTH_LOG = "/var/log/auth.log"
+
     if not os.path.exists(AUTH_LOG):
         print(f"[WARNING] {AUTH_LOG} does not exist.")
         print("[WARNING] Creating it for manual testing...")
@@ -58,11 +96,20 @@ def ensure_auth_log():
                 f.write("")
             print(f"[INFO] Created {AUTH_LOG}")
         except PermissionError:
-            print(f"[ERROR] Cannot create {AUTH_LOG}. Run with sudo.")
-            return False
+            print(f"[WARNING] Cannot create {AUTH_LOG}. Falling back to local log.")
+            return _ensure_fallback_auth_log(require_write=require_write)
         except (IOError, OSError) as e:
-            print(f"[ERROR] Cannot create {AUTH_LOG}: {e}")
-            return False
+            print(f"[WARNING] Cannot create {AUTH_LOG}: {e}. Falling back to local log.")
+            return _ensure_fallback_auth_log(require_write=require_write)
+
+    if require_write and not os.access(AUTH_LOG, os.W_OK):
+        print(f"[WARNING] No write access to {AUTH_LOG}. Falling back to local log.")
+        return _ensure_fallback_auth_log(require_write=True)
+
+    if not os.access(AUTH_LOG, os.R_OK):
+        print(f"[WARNING] No read access to {AUTH_LOG}. Falling back to local log.")
+        return _ensure_fallback_auth_log(require_write=require_write)
+
     return True
 
 
@@ -418,7 +465,7 @@ def monitor_logs():
     """
     print("[INFO] SSH log monitor started.")
 
-    if not ensure_auth_log():
+    if not ensure_auth_log(require_write=False):
         print("[ERROR] SSH log monitor cannot start. Exiting thread.")
         return
 

@@ -14,7 +14,7 @@ import os
 from datetime import datetime
 
 from file_monitor import MONITORED_DIR
-from log_monitor import AUTH_LOG, FAIL_THRESHOLD, ensure_auth_log
+import log_monitor
 
 
 def _syslog_timestamp():
@@ -25,7 +25,7 @@ def _syslog_timestamp():
 
 def _append_auth_log_line(line):
     """Safely append one line to auth.log."""
-    with open(AUTH_LOG, "a") as log_file:
+    with open(log_monitor.get_auth_log_path(), "a") as log_file:
         log_file.write(line.rstrip("\n") + "\n")
 
 
@@ -36,7 +36,7 @@ def simulate_ssh_bruteforce(ip="203.0.113.77", username="admin", attempts=None):
     Returns a dict with operation status and metadata.
     """
     if attempts is None:
-        attempts = FAIL_THRESHOLD
+        attempts = log_monitor.FAIL_THRESHOLD
 
     if attempts < 1:
         return {
@@ -45,11 +45,14 @@ def simulate_ssh_bruteforce(ip="203.0.113.77", username="admin", attempts=None):
             "message": "attempts must be >= 1",
         }
 
-    if not ensure_auth_log():
+    if not log_monitor.ensure_auth_log(require_write=True):
         return {
             "ok": False,
             "event_type": "ssh_bruteforce",
-            "message": f"Could not access auth log: {AUTH_LOG}",
+            "message": (
+                "Could not access a writable auth log "
+                f"(system or fallback: {log_monitor.get_auth_log_path()})"
+            ),
         }
 
     try:
@@ -65,7 +68,8 @@ def simulate_ssh_bruteforce(ip="203.0.113.77", username="admin", attempts=None):
             "ok": True,
             "event_type": "ssh_bruteforce",
             "message": (
-                f"Simulated {attempts} failed SSH attempts from {ip} in {AUTH_LOG}"
+                f"Simulated {attempts} failed SSH attempts from {ip} "
+                f"in {log_monitor.get_auth_log_path()}"
             ),
         }
     except (IOError, OSError, PermissionError) as e:
@@ -82,11 +86,14 @@ def simulate_ssh_success_after_failures(ip="203.0.113.77", username="admin"):
 
     Returns a dict with operation status and metadata.
     """
-    if not ensure_auth_log():
+    if not log_monitor.ensure_auth_log(require_write=True):
         return {
             "ok": False,
             "event_type": "ssh_success_after_failures",
-            "message": f"Could not access auth log: {AUTH_LOG}",
+            "message": (
+                "Could not access a writable auth log "
+                f"(system or fallback: {log_monitor.get_auth_log_path()})"
+            ),
         }
 
     try:
@@ -99,7 +106,8 @@ def simulate_ssh_success_after_failures(ip="203.0.113.77", username="admin"):
             "ok": True,
             "event_type": "ssh_success_after_failures",
             "message": (
-                f"Simulated successful SSH login from {ip} in {AUTH_LOG}"
+                f"Simulated successful SSH login from {ip} "
+                f"in {log_monitor.get_auth_log_path()}"
             ),
         }
     except (IOError, OSError, PermissionError) as e:
