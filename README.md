@@ -432,11 +432,3 @@ sudo systemctl disable ssh rsyslog
 
 ---
 
-## 12. Next Recommended Improvements
-
-- add authentication for dashboard in remote mode
-- add HTTPS reverse proxy (Nginx/Caddy)
-- move settings to config file (YAML/JSON)
-- add pytest test suite and CI checks
-- add alert persistence in SQLite/PostgreSQL
-
